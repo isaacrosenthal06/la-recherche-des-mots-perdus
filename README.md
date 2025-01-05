@@ -1,12 +1,12 @@
 # la-recherche-des-mots-perdus
 
-App to help prevent those awkward moments when you can't find the quote you are looking for (UI/API to come ...).
+App to help you find the quote you are looking for (UI/API to come ...).
 
 ## Background 
 
 There is an absence of reliable services for finding direct quotes from books using a search prompt. goodreads provides a similar service, however its queries are restricted to user-uploaded quotes and does not allow for prompt based searching within a particular book. LLMs often generate quotes that resemble the style and tone of the desired author or book, but hallucination is common. This phenomenon is primarily due to the training and generation mechanisms of LLMs. During training, contextual embeddings and transformer architectures abstract quotes away from their literal text, focusing instead on patterns and associations within the broader training data. Quotes are not treated as singular, indivisible tokens; rather, the model learns to predict subsequent tokens (within a quote) probabilistically based on context. As a result, when generating responses, LLMs prioritize coherence and contextual relevance over factual accuracy, often leading to hallucinations.
 
-**La recherche des mots perdus** hopes to provider a service that leverages advancements of NLP, while ensuring integrity of responses and providing a lightweight solution. This is accomplished through two primary features:
+**La recherche des mots perdus** hopes to provide a service that leverages advancements of NLP, while ensuring integrity of responses and providing a lightweight solution. This is accomplished through two primary features:
 
 * Insertion of new book into list of queryable books
 * Prompt-based search for quotes within existing books
@@ -52,23 +52,23 @@ For these reasons a gaussian mixture model with Dirichlet conjugate priors is us
 
 ### Embedding the prompt 
 
-Once a book has been inserted into the DB, embedded, and clustered a user is able to search for desired quotes through sending prompts to the system. In order to operate on the user's prompt, the prompt must be embedded. This is done using the same model that produced embeddings for words in the book. One difficulty which arises is if the user's prompt contains a word that was not in the vocabulary of the book (and hence the vocabulary the model was trained on). This can happen due to typos in the user's prompt or the response genuinely containing new words. Out of vocab words (OOV) are handled in this way:
+Once a book has been inserted into the DB, embedded, and clustered, a user is able to search for desired quotes through sending prompts to the system. In order to operate on the user's prompt, the prompt must be embedded. This is done using the same model that produced embeddings for words in the book. One difficulty which arises is if the user's prompt contains a word that was not in the vocabulary of the book (and hence the vocabulary the model was trained on). This can happen due to typos in the user's prompt or the response genuinely containing new words. Out of vocab words (OOV) are handled in this way:
 
 * First, the prompt is parsed and split in to tokens. Proper nouns are removed from the following steps.
 * If a token is identified as being spelled wrong, the token is spell corrected using a simple spell correction algorithm. The algorithm works by identifying the most probable word given the least amount of character corrections. "Probable" in this context is frequentist and merely comes from word frequencies in a large corpus of texts and terms. Character corrections include deletions, transposes (switching the position of two characters), replaces, and inserts. 
 * Once spell corrected, the first step is to attempt to find a potential match in the book vocabulary. This is done using Levenshtein distance, with a high threshold. In theory, if the token in the prompt was intended to be a token in the vocabulary (and we assume it takes the fewest character corrections to arrive at it), after the initial spell correcting, we would expect the token to be within one character edit of the word in the vocabulary. Therefore, the threshold is set high to ensure we aren't matching in places where we shouldn't.
-* If a fuzzy match fails, synonyms are searched for the input token. If synonyms which appear in the book are vocabulary are identified, context for the synonym are compared to the context of the input token. If only one synonym is identified or no context words match for the synonyms and the input token, we proceed to the next logic. Otherwise, the best synonym is identified by looking at synonyms with the highest number of distinct context words appearing in the window of one sentence across the entire book. Ties are broken first by the number of distinct context words appearing in the window across all sentences, then the total number of sentences with at least one context word appearing in the window. 
+* If a fuzzy match fails, synonyms are searched for the input token. If synonyms which appear in the book are vocabulary are identified, context for the synonym are compared to the context of the input token. If only one synonym is identified, or no context words match for the synonyms and the input token, we proceed to the next logic. Otherwise, the best synonym is identified by looking at synonyms with the highest number of distinct context words appearing in the window of one sentence across the entire book. Ties are broken first by the number of distinct context words appearing in the window across all sentences, then the total number of sentences with at least one context word appearing in the window. 
 * If the criteria for synonym matching is not met, a list of potential matches is generated through looking at tokens in the text that appear with the same context words as the input token. Using a similar scoring logic as above, optimal replacement tokens are identified by looking at replacement tokens with the highest number of distinct context words appearing in the window of one sentence across the entire book (i.e. multiple context words within the same window of the same sentence). Ties are broken first by the number of distinct context words appearing in the window across all sentences, then the total number of sentences with at least one context word appearing in the window. 
 * If no matches are found after the above steps, the token is excluded from the mean over the word embeddings to create the prompt embedding. With a large corpus this is unlikely, since it implies that both the input token and all context tokens did not appear in the book's text. 
 
-After token embeddings are determined, the prompt is embedded as the mean across the word embeddings. A potential enhancement would be to include IDF weights to these sentences, weighting words which appeared in fewer documents higher than those which appeared in many. This may produced a more distinguishable vector embedding of the prompt, relative to a simple mean.
+After token embeddings are determined, the prompt is embedded as the mean across the word embeddings. A potential enhancement would be to include IDF weights to these sentences, weighting words which appeared in fewer documents higher than those which appeared in many. This may produce a more distinguishable vector embedding of the prompt, relative to a simple mean.
 
 
 ### Clustering and computing similarity 
 
 Once embeddings are produced, the prompt is clustered using the trained Gaussian Mixture Model. Since the model enables the prediction of probability densities for each Gaussian cluster, the most probable clusters are retained (based off a probability threshold), and are treated as the potential clusters the prompt belongs to. 
 
-Having a list of probable clusters the prompt belongs to enables us to reduce the potential response space to sentences from the book that are also probable to belong to the same clusters. Assuming cluster size grows as the number of sentences grows, this would reduce the complexity from O(N) to O(N/K). Furthermore, if we model the number of clusters in relation to corpus size as K = N^(beta) where beta is in (0, 1] (for instance a square root growth where, when small, changes to the size of the corpus induce relatively larger changes in the number clusters), the complexity reduces to O(N^1-Beta). 
+Having a list of probable clusters, the prompt belongs to, enables us to reduce the potential response space to sentences from the book that are also probable to belong to the same clusters. Assuming cluster size grows as the number of sentences grows, this would reduce the complexity from O(N) to O(N/K). Furthermore, if we model the number of clusters in relation to corpus size as K = N^(beta) where beta is in (0, 1] (for instance a square root growth where, when small, changes to the size of the corpus induce relatively larger changes in the number clusters), the complexity reduces to O(N^1-Beta). 
 
 After determining the list of sentences in the same cluster as the prompt, cosine similarities are computed to rank sentences based off similarity to the prompt. 
 
@@ -83,7 +83,8 @@ On the backend, the original prompt text and responses are stored in the `repons
 2. Transition to cloud-based architecture
 3. Common component removal from sentence embeddings using PCA. Results in more differentiated vectors. 
 4. Weighting of tokens in prompt when producing prompt embedding
-5. As `responses` table grows, train a model with this as a corpus and add it as a final layer to sort the potential responses based off cosine scores, sentence/prompt embeddings, and the `request_status` label
+5. Enable users to input into quote size and other parameters in the search process 
+6. As `responses` table grows, train a model with this as a corpus and add it as a final layer to sort the potential responses based off cosine scores, sentence/prompt embeddings, and the `request_status` label
 
 
 
