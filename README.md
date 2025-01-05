@@ -25,7 +25,7 @@ If the book is unable to be found on Gutenberg, the user has the option to uploa
 
 Once the full book text is acquired, some basic cleaning is applied and paragraphs/sentences are inserted into the DB. *** the DB is currently a local postgres server, but eventually will be replaced with AWS RDS. The model for the DB is as follows: 
 
-![alt text](reame_pngs/mots-perdus.png)
+![DB model](readme_pngs/mots-perdus.png)
 
 Upon successfully scraping the book text or reading the text file, a new record is inserted into the `books` table with the title and author. Each paragraph and sentence is inserted into the paragraphs and sentences tables, respectively.   
 
