@@ -80,9 +80,10 @@ On the backend, the original prompt text and responses are stored in the `repons
 
 ## Future enhancements
 1. UI development
-2. Common component removal from sentence embeddings using PCA. Results in more differentiated vectors. 
-3. Weighting of tokens in prompt when producing prompt embedding
-4. As `responses` table grows, train a model with this as a corpus and add it as a final layer to sort the potential responses based off cosine scores, sentence/prompt embeddings, and the `request_status` label
+2. Transition to cloud-based architecture
+3. Common component removal from sentence embeddings using PCA. Results in more differentiated vectors. 
+4. Weighting of tokens in prompt when producing prompt embedding
+5. As `responses` table grows, train a model with this as a corpus and add it as a final layer to sort the potential responses based off cosine scores, sentence/prompt embeddings, and the `request_status` label
 
 
 
