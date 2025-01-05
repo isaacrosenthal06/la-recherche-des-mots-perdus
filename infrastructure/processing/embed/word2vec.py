@@ -17,6 +17,8 @@ from collections import Counter
 import tensorflow as tf
 import keras
 from tensorflow.keras import layers
+from nltk.corpus import stopwords
+nltk.download('stopwords')
 
 SEED = 42
 AUTOTUNE = tf.data.AUTOTUNE
@@ -62,6 +64,7 @@ class WordEmbeddingModel:
         token_set = set()
         max_len = 0
         pk = None
+        stop_words = set(stopwords.words('english'))
 
         for p in self.corpus: 
             
@@ -85,8 +88,14 @@ class WordEmbeddingModel:
                 if s:
                 
                     tokens = word_tokenize(s)
+                    
+                    ## drop stop words
+                    filtered_sentence = [word for word in tokens if word not in stop_words]
+
+                    # Join the filtered words back into a sentence
+                    s_no_stop = " ".join(filtered_sentence)
                 
-                    sentence_all.append(s)
+                    sentence_all.append(s_no_stop)
                     sentence_pk.append(pk)
                     
                     pk += 1
@@ -265,19 +274,19 @@ class WordEmbeddingModel:
     
     def split_paragraph_into_sentences(self, paragraph):
         ## identify quoted text
-        quoted_text = re.findall(r'["\']([^"]*)[\'"]', paragraph)  # Extract quoted text
+        quoted_text = re.findall(r'["\']["\']([^\']+[^\']*)["\']["\']', paragraph)  # Extract quoted text
         
         ## replace quoted text with placeholders so they aren't split
         placeholder = "<QUOTE>"
         for idx, quote in enumerate(quoted_text):
-            paragraph = paragraph.replace(f'"{quote}"', f'{placeholder}{idx}{placeholder}')
+            paragraph = paragraph.replace(f"'{quote}'", f'{placeholder}{idx}{placeholder}')
 
         # split on typical endings
         sentences = re.split(r'(?<=\w[.!?])\s+(?!(?:Mr|Dr|Prof|Inc|Jr|Sr|vs|etc)\.)(?=(?!<QUOTE>\d+<QUOTE>))', paragraph.strip())
 
         # replace placeholders with original text
         for idx, quote in enumerate(quoted_text):
-            sentences = [s.replace(f'{placeholder}{idx}{placeholder}', f'"{quote}"') for s in sentences]
+            sentences = [s.replace(f'{placeholder}{idx}{placeholder}', f"'{quote}'") for s in sentences]
 
         return sentences
                 

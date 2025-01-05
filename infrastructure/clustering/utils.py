@@ -14,6 +14,10 @@ from fuzzywuzzy import process
 from nltk.corpus import wordnet
 from collections import Counter
 import spacy 
+import nltk 
+from nltk.corpus import stopwords
+nltk.download('stopwords')
+nltk.download('wordnet')
 
 class Cluster:
     
@@ -86,15 +90,20 @@ class Cluster:
                 
                 total_wt += wt 
 
+            if total_wt != 0:
+                weighted_avg = np.sum(wtd_vectors, axis = 0, dtype=np.float64) / total_wt
+            else: 
+                if len(wtd_vectors) > 1:
+                    raise ValueError("TF-idf weights of zero for sentences with multiple tokens")
+                weighted_avg = wtd_vec
             
-            weighted_avg = np.sum(wtd_vectors, axis = 0, dtype=np.float64) / total_wt
             
             self.tf_idf.at[index, 'sentence_vec']     = weighted_avg
             self.tf_idf.at[index,'sentence_weight']   = total_wt
             
         return self.tf_idf 
     
-    def plot_embeddings(self, embeddings, plot_title, labels = None):
+    def plot_embeddings(self, embeddings, labels = None):
         
         ## dimensionality reduction 
         pca = PCA(n_components = 3)
@@ -108,10 +117,10 @@ class Cluster:
         ax.set_xlabel('PC1')
         ax.set_ylabel('PC2')
         ax.set_zlabel('PC3')
-
-        plt.show()
         
-        ##plt.savefig(f'{self.plot_path}/{plot_title}.png') 
+        ##plt.show()
+        
+        plt.savefig(f'{self.plot_path}/{self.title}_cluster_plot.png') 
         plt.close()
         
     def fit_clustering(self, embeddings, max_clusters, alpha):
@@ -128,7 +137,7 @@ class Cluster:
         
         return(dpgmm)
     
-    def classify_sentence(self, sentence_embeddings, threshold, model):
+    def get_gaussian_probs(self, sentence_embeddings, threshold, model):
         
         dpgmm = model
         
@@ -138,7 +147,7 @@ class Cluster:
         ## identify clusters meeting a specific probability threshold
         above_threshold = [np.where(row > threshold)[0] for row in probs]
         
-        return above_threshold
+        return above_threshold , probs
 
 class Predict:
     
@@ -150,7 +159,7 @@ class Predict:
                  vocab: np.array,
                  vectors: np.array,
                  embeddings_df: List,
-                 cluster_model: sklearn.mixture.BayesianGaussianMixture,
+                 cluster_model: BayesianGaussianMixture,
                 ):
         
         script_dir = Path(__file__).resolve().parent.parent
@@ -190,6 +199,8 @@ class Predict:
         ## if a parapgraph split into sentences
         sentences =  self.split_paragraph_into_sentences(self.new_text)
         
+        stop_words = set(stopwords.words('english'))
+        
         embeddings = []
         row = 0
         ## tokenize
@@ -201,77 +212,91 @@ class Predict:
                 
                 processed_s = nlp(s) 
                 
-                orig_tokens  = [token.text.lower() for token in processed_s]
-                proper_nouns = [token.text.lower() for token in processed_s if token.pos_ == "PROPN"] 
+                orig_tokens         = [token.text.lower() for token in processed_s]
+                orig_tokens_no_stop = [word for word in orig_tokens if word not in stop_words]
+                proper_nouns        = [token.text.lower() for token in processed_s if token.pos_ == "PROPN"] 
                 spell_corrected = []
                 vectors = []
                 
-                for token in orig_tokens: 
-                    if token not in self.spelling_words and token not in proper_nouns:
+                for token in orig_tokens_no_stop: 
+                    if token not in self.spelling_words and token not in proper_nouns and len(wordnet.synsets(token)) == 0:
                         spell_corrected.append(self.spell_correct(token))
                     else: 
                         spell_corrected.append(token)
                 
-                for i in range(len(orig_tokens)):
+                for i in range(len(orig_tokens_no_stop)):
                     
                     token = spell_corrected[i]
+                    
+                    print(f'Embedding token: {token}')
                     
                     context = []
                     rem = len(spell_corrected) - 1 - i
                     rem = min(rem, window)
+                    iter = 1
                     while rem > 0:
-                        context.append(spell_corrected[i + rem])
-                        rem += 1
+                        context.append(spell_corrected[i + iter])
+                        rem -= 1
+                        iter += 1
 
                     pad = i 
                     pad = min(pad, window)
+                    
+                    iter = 1
                     while pad > 0:
-                        context.append(spell_corrected[i - pad])
+                        context.append(spell_corrected[i - iter])
+                        pad -= 1
+                        iter += 1
                         
                     
                     index = None
+                    vocab_list = self.vocab.flatten().tolist()
                     ## handling OOV words
-                    if token not in self.vocab:
+                    if token not in vocab_list:
                         
                         print(f"Token {token} not found in vocab looking for a replacement.")
                         
                         ## try fuzzy matching -- will be applied to proper nouns (with a score of 90 it is likely just one or two chars are being being changed) 
-                        best_match = process.extract0ne(token, self.vocab)
+                        best_match, score = process.extract(token, vocab_list, limit = 1)[0]
                         
-                        if best_match[1] > 90:
-                            index =  np.where(self.vocab == best_match[0])
+                        if score > 90:
+                            index =  vocab_list.index(best_match)
                             
                         ## next try - find a synonym and compare to context 
                         if not index:
                             
                             if wordnet.synsets(token):
                                 
-                                synonyms = wordnet.synsets("happy")
+                                synonyms = wordnet.synsets(token)
                                 synonym_words = set([lemma.name().lower() for syn in synonyms for lemma in syn.lemmas()])
-                                synonym_words = {syn for syn in synonym_words if syn in self.vocab}
+                                synonym_words_set = {syn for syn in synonym_words if syn in vocab_list}
                                 
-                                if len(synonym_words) > 0:
+                                if len(synonym_words_set) > 1:
+                                    
+                                    print(f'Synonyms identified: {synonym_words}')
                                     
                                     ## check if any synonyms have similar context words 
                                     ## check if any context words from text are in vocab -- take intersection 
-                                    common_elements = set(context) & set(self.vocab)
+                                    common_elements = set(context) & set(vocab_list)
                                         
                                     if len(common_elements) > 0:
                                         
                                         common_dict = {}
-                                        for syn in synonyms:
-                                            syn_index = np.where(self.vocab == token)
-                                            common_dict[str(syn_index)]['total_matches'] = 0
-                                            common_dict[str(syn_index)]['distinct_context_matches'] = 0 
-                                            common_dict[str(syn_index)]['row_context_indices'] = []
-                                            common_dict[str(syn_index)]['row_syn_indices'] = []
+                                        for syn in synonym_words:
+                                            syn_index = vocab_list.index(syn)
+                                            common_dict[str(syn_index)] = {
+                                                'total_matches': 0,
+                                                'distinct_context_matches': 0, 
+                                                'row_context_indices' : [],
+                                                'row_syn_indices':  []
+                                            }
                                             
                                             for ele in common_elements:
                                                 ele_index = np.where(self.vocab == ele)
-                                                mask = self.embeddings_df['token_indices'].isin(ele_index) \
-                                                        & self.embeddings_df['token_indices'].isin(syn_index) \
-                                                        & (abs(self.embeddings_df['token_indices'].index(ele_index) - \
-                                                            self.embeddings_df['token_indiices'].index(syn_index)) <= window) 
+                                                mask = self.embeddings_df['token_indices'].apply(lambda x: ele_index in x.tolist()) \
+                                                        & self.embeddings_df['token_indices'].apply(lambda x: syn_index in x.tolist()) \
+                                                        (abs(self.embeddings_df['token_indices'].apply(lambda x: x.tolist().index(ele_index) if ele_index in x.tolist() else None) - \
+                                                            self.embeddings_df['token_indices'].apply(lambda x: x.tolist().index(syn_index) if syn_index in x.tolist() else None)) <= window) 
                                                 
                                                 syn_ele_df = self.embeddings_df[mask]
                                                     
@@ -284,7 +309,7 @@ class Predict:
                                                     ## if row_syn index has duplicate values this indicates multiple context words appear in the same window for the same sentence
                                                     row_syn_indices     = [len(self.embeddings_df) * index + x for x in syn_indices]
                                                              
-                                                    common_dict[str(syn_index)]['row_syn_indices'] = common_dict[str(syn_index)]['row_syn_indices'] + row_syn_indices
+                                                    common_dict[str(syn_index)]['row_syn_indices'].extend(row_syn_indices)
                                                 
                                                 ## add n matches to dict
                                                 common_dict[str(syn_index)]['total_matches'] += sum(mask)
@@ -338,11 +363,11 @@ class Predict:
                         if not index:
                             
                             potential_targets = {}
-                            common_elements = set(context) & set(self.vocab)
+                            common_elements = set(context) & set(vocab_list)
                             
                             for ele in common_elements: 
-                                ele_index = np.where(self.vocab == ele)
-                                mask = self.embeddings_df['token_indices'].isin(ele_index)
+                                ele_index = vocab_list.index(ele)
+                                mask = self.embeddings_df['token_indices'].apply(lambda x: ele_index in x.tolist())
                                 
                                 ele_df = self.embeddings_df[mask]
                                 
@@ -354,6 +379,7 @@ class Predict:
                                                          if any([abs(context_index - i) <= window for context_index in context_indices])]
                                     targ_indices    = [i for i, x in enumerate(row['token_indices']) \
                                                          if any([abs(context_index - i) <= window for context_index in context_indices])]
+                                
                                     
                                     ## add context match info for each potential targ
                                     for i in range(len(potential_targs)):
@@ -367,14 +393,16 @@ class Predict:
                                         
                                         targ = potential_targs[i]
 
-                                        if targ not in potential_targets.keys():
-                                            potential_targets[targ]['contexts']         = set(ele_index)
-                                            potential_targets[targ]['row_indices']      = [index]
-                                            potential_targets[targ]['row_targ_indices'] = [row_index + ele_index]
+                                        if str(targ) not in potential_targets.keys():
+                                            potential_targets[str(targ)] = {
+                                                'contexts': set([ele_index]),
+                                                'row_indices': [row_index],
+                                                'row_targ_indices' : [row_index + ele_index]
+                                            }
                                         else:
-                                            potential_targets[targ]['contexts']     = potential_targets[targ]['contexts'].add()
-                                            potential_targets[targ]['row_indices']  = potential_targets[targ]['row_indices'].append(index)
-                                            potential_targets[targ]['row_targ_indices'] = potential_targets[targ]['row_targ_indices'].append(row_index + ele_index)
+                                            potential_targets[str(targ)]['contexts'] = potential_targets[str(targ)]['contexts'] | {ele_index}
+                                            potential_targets[str(targ)]['row_indices'].append(row_index)
+                                            potential_targets[str(targ)]['row_targ_indices'].append(row_index + ele_index)
                             
                             ## find best target -- criteria 1, record with the max number of context matches withina given window
                             max_row_targ_list = []
@@ -387,6 +415,7 @@ class Predict:
                                 ## count duplicate row_targ indices, this indicates target shows up in window of multiple context words
                                 row_targ_set = set(potential_targets[targ]['row_targ_indices'])
                                 
+                                
                                 for val in row_targ_set:
                                     if len([x for x in potential_targets[targ]['row_targ_indices'] if x == val]) > max_row_targ:
                                         max_row_targ = len([x for x in potential_targets[targ]['row_targ_indices'] if x == val])
@@ -395,39 +424,40 @@ class Predict:
                                 max_distinct_match = len(potential_targets[targ]['contexts'])
                                 
                                 ## criteria 3, record with max context matches total 
-                                max_distinct_match = len(potential_targets[targ]['row_indices'])
+                                max_total_match = len(potential_targets[targ]['row_indices'])
                                 
                                 max_row_targ_list.append(max_row_targ)
                                 max_distinct_list.append(max_distinct_match)
-                                max_total_list.append(max_distinct_match)
+                                max_total_list.append(max_total_match)
                             
                             ## identify record 
+                            key_list = list(potential_targets.keys())
                             max_row_targ_indices = [i for i, x in enumerate(max_row_targ_list) if x == max(max_row_targ_list)]
                             if len(max_row_targ_indices) == 1:
-                                index = potential_targets.keys()[max_row_targ_indices[0]]
+                                index = int(key_list[int(max_row_targ_indices[0])])
                             else:
-                                max_distinct_list_filetered = [x for i, x in enumerate(max_distinct_list) if i in max_row_targ_indices]
-                                max_distinct_indices = [i for i, x in enumerate(max_distinct_list_filetered) if x == max(max_distinct_list_filetered)]
+                                max_distinct_list_filtered = [x for i, x in enumerate(max_distinct_list) if i in max_row_targ_indices]
+                                max_distinct_indices = [i for i, x in enumerate(max_distinct_list_filtered) if x == max(max_distinct_list_filtered)]
                                 if len(max_distinct_indices) == 1:
-                                    index = potential_targets.keys()[max_distinct_indices[0]]
+                                    index = int(key_list[max_row_targ_indices[max_distinct_indices[0]]])
                                 else:
                                     max_total_list_filetered = [x for i, x in enumerate(max_total_list) if i in max_distinct_indices]
                                     max_total_indices = [i for i, x in enumerate(max_total_list_filetered) if x == max(max_total_list_filetered)]
-                                    if len(max_total_indices) == 1:
-                                        index = potential_targets.keys()[max_total_indices[0]]
+                                    index = int(key_list[max_row_targ_indices[max_distinct_indices[max_total_indices[0]]]])
                         
                         ## if no match found, exclude word from the vector average    
                         if not index:
                             print("No replacement word found")
                         else:
-                            print(f'{self.vocab[index]} identified as best match for {token}')
+                            print(index)
+                            print(f'{vocab_list[int(index)]} identified as best match for {token}')
                         
                     else:
                             
-                        index = np.where(self.vocab == token)
+                        index = vocab_list.index(token)
                     
                     if index: 
-                        vec = self.vectors[index] 
+                        vec = self.vectors[int(index)] 
                     
                         ## add idf weights for each word here
                         vectors.append(vec)
@@ -454,20 +484,52 @@ class Predict:
     def compute_similarity(self, sentence_embedding, clusters):
         
         ##normalize 
-        mask =self.embeddings_df['probable_cluster'].apply(lambda clus_list: any(clus in clusters for clus in clus_list))
+        mask =self.embeddings_df['cluster_labels'].apply(lambda clus_list: any(clus in clusters for clus in clus_list))
         
         cluster_mask_df = self.embeddings_df[mask]
         
+        sentence_pks = cluster_mask_df['pk']
+    
         book_vecs = np.array(cluster_mask_df['sentence_vec'].tolist())
         
         norm_book_vecs = np.linalg.norm(book_vecs, axis = 1)
         
         norm_input = np.linalg.norm(sentence_embedding)
         
-        similarities = np.dot(book_vecs, sentence_embedding)/ (norm_book_vecs * norm_input)
+        similarities = [np.dot(book_vec, np.squeeze(sentence_embedding, axis = 0))/ (norm_book_vecs[i] * norm_input) for i, book_vec in enumerate(book_vecs)]
         
-        return similarities
+        return similarities, sentence_pks
         
+    
+    def insert_request(self, response:str, score:float):
+        
+        request = self.new_text 
+        
+        statement = """
+               INSERT INTO responses (fk_books, fk_paragraphs, fk_sentences, request_date, request_text, response_text, score) 
+               VALUES (
+                   (SELECT pk FROM books WHERE title = :book_title 
+                                               AND author = :book_author),
+                   (SELECT fk_paragraphs FROM sentences WHERE fk_books = (SELECT pk FROM books WHERE title = :book_title 
+                                                                AND author = :book_author)
+                                                        AND sentence_text = :response),
+                   (SELECT pk FROM sentences WHERE fk_books = (SELECT pk FROM books WHERE title = :book_title 
+                                                                AND author = :book_author)
+                                                        AND sentence_text = :response),
+                   (SELECT NOW()),
+                   :request,
+                   :response,
+                   :score
+               )
+        """
+        
+        self.execute_statement(statement, {
+            "request" : request,
+            "response" : response,
+            "book_title": self.title,
+            "book_author": self.author,
+            "score" : score  
+        })
                                         
     def spell_correct(self, raw_word):
         
@@ -475,6 +537,7 @@ class Predict:
         candidates = None 
         edits = set()
         letters    = 'abcdefghijklmnopqrstuvwxyz'
+        
         ## incrementally apply edits
         while not candidates:
             ## potential ways to split the text
@@ -500,16 +563,13 @@ class Predict:
         probs = [self.compute_word_prob(candidate) for candidate in candidates]
         max_candidate = probs.index(max(probs))
         
-        return(max_candidate)
-        
+        return(list(candidates)[max_candidate])
         
         
     def compute_word_prob(self, word):
-        N = sum(self.spelling_words.value())
+        N = len(self.spelling_words)
         
-        return self.words[word]/N 
-        
-   
+        return self.spelling_words[word]/N 
         
     def split_paragraph_into_sentences(self, paragraph):
         
@@ -522,32 +582,37 @@ class Predict:
             paragraph = paragraph.replace(f'"{quote}"', f'{placeholder}{idx}{placeholder}')
 
         # split on typical endings
-        sentences = re.split(r'(?<=\w[.!?])\s+(?!(?:Mr|Dr|Prof|Inc|Jr|Sr|vs|etc)\.)(?=(?!<QUOTE>\d+<QUOTE>))', paragraph.strip())
+        sentences = re.split(r'(?<=\w[.!?])\s+(?!(?:Mr|Dr|Prof|Inc|Jr|Sr|vs|etc|Ms|Mrs)\.)(?=(?!<QUOTE>\d+<QUOTE>))', paragraph.strip())
 
         # replace placeholders with original text
         for idx, quote in enumerate(quoted_text):
                 sentences = [s.replace(f'{placeholder}{idx}{placeholder}', f'"{quote}"') for s in sentences]
 
         return sentences
-        
-        
     
+    def execute_statement(self, qry, dict):
 
-
+        try: 
             
-                   
+            engine = create_engine(self.db_url, isolation_level="AUTOCOMMIT")
+            
+            with engine.connect() as connection:
+                
+                try:
+                    # execute
+                    print(qry)
+                    response = connection.execute(text(qry), dict)
+
+                    print("Transaction committed successfully!")
+                    return response
+                    
+                except Exception as e:
+                    print("An error occurred when executing:", e)
+                    return False 
         
-     
-meta_clus = Cluster(config_path='db/config.json', title = "Metamorphosis", author = 'Kafka', 
-        vocabulary='processing/embeddings/Metamorphosis_metadata.tsv',
-        tf_idf_wts='processing/embeddings/Metamorphosis_tf_ids_wts.csv',
-        vectors='processing/embeddings/Metamorphosis_vectors.tsv')    
-
-embed = meta_clus.embed_sentences()
-
-labels = meta_clus.fit_clustering(np.array(embed['sentence_vec'].tolist()), alpha = 2, max_clusters = 15)
-
-
-meta_clus.plot_embeddings(np.array(embed['sentence_vec'].tolist()), plot_title = "metamorphosis", labels = labels.predict(np.array(embed['sentence_vec'].tolist())))
+        except Exception as e:
+            
+            print(f"Error occurred when connecting: {e}")
+            return False 
    
         

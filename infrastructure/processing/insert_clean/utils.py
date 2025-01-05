@@ -44,7 +44,7 @@ class InsertNewBook:
             
             except Exception as e:
                 
-                print("Error in reading text file")
+                print(f"Error in reading text file: {e}")
     
 
     def contains_chapter_start(self, text: str) -> bool:
@@ -99,6 +99,8 @@ class InsertNewBook:
             book_links = soup.find_all('li', class_ = 'booklink')
             
             desired_link = None
+            found_title = None 
+            found_author = None 
             
             for link in book_links:
                 
@@ -167,11 +169,11 @@ class InsertNewBook:
                             p_text = re.sub("  +", " ", p.get_text().replace('\r',' ').replace('\n',' '))
                             
                             # Replace both single and double quotes with two single quotes
-                            p_text = re.sub(r"[\'\"]", "''", p_text)
+                            p_text = re.sub(r"[\"“”]", "''", p_text)
                             
                             paragraphs.append(p_text)
             
-            return(paragraphs)
+            return paragraphs, found_title, found_author 
 
         except requests.RequestException as e:
             print(f"Book query request failed: {e}")
@@ -201,22 +203,20 @@ class InsertNewBook:
                 try:
                     # execute
                     print(qry)
-                    connection.execute(text(qry), dict)
+                    response = connection.execute(text(qry), dict)
 
                     print("Transaction committed successfully!")
-                    return True
+                    return response, True
                     
                 except Exception as e:
                     
                     print("An error occurred when executing:", e)
-                    stop
-                    return False 
+                    return None, False 
         
         except Exception as e:
             
             print(f"Error occurred when connecting: {e}")
-            stop
-            return False 
+            return None, False 
             
 
 
@@ -311,20 +311,53 @@ class InsertNewBook:
                                                             "sentence_len": sentence_length 
                                                         })
 
+    def confirm_not_in_db(self, title_new, author_new, threshold):
+        
+        statement = """
+
+            SELECT title, author FROM books as b
+            WHERE (similarity(b.title, :new_title) > :threshold
+                   AND similarity(b.author, :new_author) > :threshold)
+                -- tokenized matching
+                OR (b.text_search_vector_title @@ plainto_tsquery('english', :new_title)
+                    AND b.text_search_vector_author @@ plainto_tsquery('english', :new_author))
+            ORDER BY 
+                similarity(b.title, :new_title) DESC,
+                similarity(b.author, :new_author) DESC
+            LIMIT 1;    
+            
+        """
+        val_dict = {
+            'new_title': title_new,
+            'new_author': author_new,
+            'threshold': threshold
+        }
+        
+        response, response_status = self.execute_statement(statement, dict = val_dict)
+        
+        if response_status:
+            print(f'Existing book identified: {response.fetchone()}')
+            
+            return response.fetchone(), response_status
+        else: 
+            print(f'Existing book not identified')
+            
+            return None, response_status
+
     def split_paragraph_into_sentences(self, paragraph):
         ## identify quoted text
-        quoted_text = re.findall(r'["\']([^"]*)[\'"]', paragraph)  # Extract quoted text
+        quoted_text = re.findall(r'["\']["\']([^\']+[^\']*)["\']["\']', paragraph)  # Extract quoted text
         
         ## replace quoted text with placeholders so they aren't split
         placeholder = "<QUOTE>"
         for idx, quote in enumerate(quoted_text):
-            paragraph = paragraph.replace(f'"{quote}"', f'{placeholder}{idx}{placeholder}')
+            paragraph = paragraph.replace(f"'{quote}'", f'{placeholder}{idx}{placeholder}')
 
         # split on typical endings
         sentences = re.split(r'(?<=\w[.!?])\s+(?!(?:Mr|Dr|Prof|Inc|Jr|Sr|vs|etc)\.)(?=(?!<QUOTE>\d+<QUOTE>))', paragraph.strip())
 
         # replace placeholders with original text
         for idx, quote in enumerate(quoted_text):
-            sentences = [s.replace(f'{placeholder}{idx}{placeholder}', f'"{quote}"') for s in sentences]
+            sentences = [s.replace(f'{placeholder}{idx}{placeholder}', f"'{quote}'") for s in sentences]
 
         return sentences

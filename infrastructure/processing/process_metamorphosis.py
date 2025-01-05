@@ -8,6 +8,9 @@ import pandas as pd
 ## insert book into db 
 insert_metamorphosis = InsertNewBook(config_path='db/config.json', title = "Metamorphosis", author = 'Kafka') 
 
+insert_metamorphosis.confirm_not_in_db(title_new = "Metamorphosis", author_new="Kafka", threshold = .7)
+stop
+
 inserted = False
 if not inserted:
     ## clear existing records 
@@ -46,9 +49,10 @@ else:
     
     if not inserted:
         insert_metamorphosis.insert_book_db()
-
+        stop
         insert_metamorphosis.insert_text_db(text)
-    
+        
+
     ###################
     ## Learn embeddings
     ##################
@@ -110,7 +114,7 @@ else:
     script_dir = Path(__file__).resolve().parent
     embeddings_dir = script_dir / 'embeddings'
 
-    df.to_csv(f'{embeddings_dir}/{embeddings_metamorphosis.title}_tf_ids_wts.csv', index=False)
+    df.to_csv(f'{embeddings_dir}/{embeddings_metamorphosis.title}_tf_idf_wts.csv', index=False)
     #print(vocab)
     
     # for tf_idf_wt in tf_idf_weights[:5]:
