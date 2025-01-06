@@ -16,6 +16,7 @@ from collections import Counter
 import spacy 
 import nltk 
 from nltk.corpus import stopwords
+import pickle
 nltk.download('stopwords')
 nltk.download('wordnet')
 
@@ -27,7 +28,8 @@ class Cluster:
                  author: str,
                  vocabulary: str,
                  tf_idf_wts: str,
-                 vectors: str):
+                 vectors: str,
+                 embedding_dim: int):
         
         script_dir = Path(__file__).resolve().parent.parent
 
@@ -47,6 +49,7 @@ class Cluster:
         self.db_name        = config["DB_NAME"]
         self.title          = title
         self.author         = author 
+        self.embedding_dim  = embedding_dim
         
         self.plot_path      = Path(__file__).resolve().parent / 'plots'
         self.db_url = f'postgresql+psycopg2://{self.db_user}:{self.db_password}@{self.db_host}:{self.db_port}/{self.db_name}'
@@ -65,7 +68,7 @@ class Cluster:
         self.tf_idf['token_indices']    = self.tf_idf['token_indices'].apply(literal_eval).apply(np.array) 
         self.tf_idf['weights']          = self.tf_idf['weights'].apply(literal_eval).apply(np.array) 
         self.tf_idf['sentence_weight']  = np.nan
-        self.tf_idf['sentence_vec']     = [np.empty((1, 100)) for _ in range(0, len(self.tf_idf))]
+        self.tf_idf['sentence_vec']     = [np.empty((1, self.embedding_dim)) for _ in range(0, len(self.tf_idf))]
         
         for index, row in self.tf_idf.iterrows():
             
@@ -75,7 +78,7 @@ class Cluster:
             total_wt = 0
             
             ## print first five tokens
-            wtd_vectors = np.empty((len(words), 100))
+            wtd_vectors = np.empty((len(words), self.embedding_dim))
             for i, ele in enumerate(words):
                 
                 if index == 0 and i < 5:
@@ -137,6 +140,26 @@ class Cluster:
         
         return(dpgmm)
     
+    def save_model(self, model):
+        
+        script_dir = Path(__file__).resolve().parent
+        
+        filename = f'DPGMM_{self.title}_{self.author}'
+        
+        file_path = script_dir / f'models/{filename}.pkl'
+        
+        try:
+            with open(file_path, 'wb') as f:
+                pickle.dump(model, f)
+                
+            print(f"Model saved successfully to {filename}")
+            
+        except Exception as e:
+            print(f"Error saving model: {e}")
+
+            
+        
+    
     def get_gaussian_probs(self, sentence_embeddings, threshold, model):
         
         dpgmm = model
@@ -156,10 +179,10 @@ class Predict:
                  config_path: str, 
                  title: str, 
                  author: str,
-                 vocab: np.array,
-                 vectors: np.array,
-                 embeddings_df: List,
-                 cluster_model: BayesianGaussianMixture,
+                 vocab: str,
+                 vectors: str,
+                 embeddings_path: str,
+                 cluster_model_path: str
                 ):
         
         script_dir = Path(__file__).resolve().parent.parent
@@ -175,14 +198,24 @@ class Predict:
         self.db_port        = config["DB_PORT"]
         self.db_name        = config["DB_NAME"]
         self.title          = title
-        self.author         = author 
-        self.vectors        = vectors 
-        self.vocab          = vocab
-        self.embeddings_df  = embeddings_df  
+        self.author         = author
+
         self.new_text       = new_text
-        self.cluster_model  = cluster_model
         
+        vocab_path  = script_dir / vocab 
+        vector_path = script_dir / vectors 
+        labeled_embeddings_path = script_dir / embeddings_path
+        model_path = script_dir / cluster_model_path
         
+        self.vectors         = pd.read_csv(vector_path, delimiter = '\t', header = None).to_numpy()
+        self.vocab           = pd.read_csv(vocab_path, delimiter = '\t', header = None).to_numpy()
+        self.embeddings_df = pd.read_csv(labeled_embeddings_path)
+        self.embeddings_df['token_indices']    = self.embeddings_df['token_indices'].str.replace(r"\s+", ",", regex=True).str.replace(r",]", "]", regex=True).str.replace(r"\[,", "[", regex=True).apply(literal_eval).apply(np.array) 
+        self.embeddings_df['weights']          = self.embeddings_df['weights'].str.replace(r"\s+", ",", regex=True).str.replace(r",]", "]", regex=True).str.replace(r"\[,", "[", regex=True).apply(literal_eval).apply(np.array) 
+        self.embeddings_df['sentence_vec']     = self.embeddings_df['sentence_vec'].str.replace(r"\s+", ",", regex=True).str.replace(r",]", "]", regex=True).str.replace(r"\[,", "[", regex=True).apply(literal_eval).apply(np.array) 
+        self.embeddings_df['cluster_labels']   = self.embeddings_df['cluster_labels'].str.replace(r"\s+", ",", regex=True).str.replace(r",]", "]", regex=True).str.replace(r"\[,", "[", regex=True).apply(literal_eval).apply(list) 
+        self.embeddings_df['cluster_probs']   = self.embeddings_df['cluster_probs'].str.replace(r"\s+", ",", regex=True).str.replace(r",]", "]", regex=True).str.replace(r"\[,", "[", regex=True).apply(literal_eval).apply(list) 
+
         self.plot_path      = Path(__file__).resolve().parent / 'plots'
         self.db_url = f'postgresql+psycopg2://{self.db_user}:{self.db_password}@{self.db_host}:{self.db_port}/{self.db_name}' 
         
@@ -191,7 +224,12 @@ class Predict:
         
         self.spelling_words = Counter(re.findall(r'\w+', open(spell_path).read().lower()))
         
+        ## load dpgmm model 
+        with open(model_path, 'rb') as f:
+            self.cluster_model = pickle.load(f)
         
+        
+    
     def embed_new_sentence(self, window = 5):
         
         nlp = spacy.load("en_core_web_sm")
@@ -273,7 +311,7 @@ class Predict:
                                 
                                 if len(synonym_words_set) > 1:
                                     
-                                    print(f'Synonyms identified: {synonym_words}')
+                                    print(f'Synonyms identified: {synonym_words_set}')
                                     
                                     ## check if any synonyms have similar context words 
                                     ## check if any context words from text are in vocab -- take intersection 
@@ -282,7 +320,7 @@ class Predict:
                                     if len(common_elements) > 0:
                                         
                                         common_dict = {}
-                                        for syn in synonym_words:
+                                        for syn in synonym_words_set:
                                             syn_index = vocab_list.index(syn)
                                             common_dict[str(syn_index)] = {
                                                 'total_matches': 0,
@@ -293,12 +331,11 @@ class Predict:
                                             
                                             for ele in common_elements:
                                                 ele_index = np.where(self.vocab == ele)
-                                                mask = self.embeddings_df['token_indices'].apply(lambda x: ele_index in x.tolist()) \
-                                                        & self.embeddings_df['token_indices'].apply(lambda x: syn_index in x.tolist()) \
-                                                        (abs(self.embeddings_df['token_indices'].apply(lambda x: x.tolist().index(ele_index) if ele_index in x.tolist() else None) - \
-                                                            self.embeddings_df['token_indices'].apply(lambda x: x.tolist().index(syn_index) if syn_index in x.tolist() else None)) <= window) 
+                                                mask1 = self.embeddings_df['token_indices'].apply(lambda x: ele_index in x.tolist()) 
+                                                mask2 = self.embeddings_df['token_indices'].apply(lambda x: syn_index in x) 
+                                                mask3 = (abs(self.embeddings_df['token_indices'].apply(lambda x: x.tolist().index(ele_index) if ele_index in x.tolist() else None) - self.embeddings_df['token_indices'].apply(lambda x: x.tolist().index(syn_index) if syn_index in x.tolist() else None)) <= window) 
                                                 
-                                                syn_ele_df = self.embeddings_df[mask]
+                                                syn_ele_df = self.embeddings_df[mask1 & mask2 & mask3]
                                                     
                                                 for index, row in syn_ele_df.iterrows():
                                                     
@@ -324,7 +361,7 @@ class Predict:
                                             ## criteria 1, record with the max number of context matches withina given window
                                             max_syn_dup = 0
                                             ## count duplicate row_syn indices, this indicates multiple context shows up in window of synonym
-                                            row_targ_set = set(common_dict[targ]['row_syn_indices'])
+                                            row_targ_set = set(common_dict[syn]['row_syn_indices'])
                                             
                                             for val in row_targ_set:
                                                 if len([x for x in common_dict[syn]['row_syn_indices'] if x == val]) > max_syn_dup:
@@ -332,9 +369,9 @@ class Predict:
                                             
                                             
                                             ## criteria 2, record with the maximum distinct matches 
-                                            max_distinct_match = len(common_dict[syn]['distinct_context_matches'])
+                                            max_distinct_match = common_dict[syn]['distinct_context_matches']
                                             ## criteria 3, record with max context matches total 
-                                            max_distinct_match = len(common_dict[targ]['total_matches'])
+                                            max_distinct_match = common_dict[syn]['total_matches']
                                             
                                             max_syn_dups.append(max_syn_dup)
                                             max_distinct_list.append(max_distinct_match)
@@ -357,7 +394,6 @@ class Predict:
                                                 if len(max_total_indices) == 1:
                                                     index = common_dict.keys()[max_total_indices[0]]
                                         
-                                        index = np.where(self.vocab == best_syn)
 
                         ## use context to find best match 
                         if not index:
@@ -501,7 +537,7 @@ class Predict:
         return similarities, sentence_pks
         
     
-    def insert_request(self, response:str, score:float):
+    def insert_request(self, pk:int, response:str, score:float):
         
         request = self.new_text 
         
@@ -510,25 +546,25 @@ class Predict:
                VALUES (
                    (SELECT pk FROM books WHERE title = :book_title 
                                                AND author = :book_author),
-                   (SELECT fk_paragraphs FROM sentences WHERE fk_books = (SELECT pk FROM books WHERE title = :book_title 
+                   (SELECT fk_paragraph FROM sentences WHERE fk_books = (SELECT pk FROM books WHERE title = :book_title 
                                                                 AND author = :book_author)
-                                                        AND sentence_text = :response),
-                   (SELECT pk FROM sentences WHERE fk_books = (SELECT pk FROM books WHERE title = :book_title 
-                                                                AND author = :book_author)
-                                                        AND sentence_text = :response),
-                   (SELECT NOW()),
+                                                        AND pk = :pk),
+                   :pk,
+                   NOW(),
                    :request,
                    :response,
-                   :score
+                   cast(:score as double precision)
                )
         """
         
+        
         self.execute_statement(statement, {
             "request" : request,
-            "response" : response,
+            "response" : response[0],
             "book_title": self.title,
             "book_author": self.author,
-            "score" : score  
+            "score" : score,  
+            "pk": pk
         })
                                         
     def spell_correct(self, raw_word):

@@ -282,7 +282,7 @@ class WordEmbeddingModel:
             paragraph = paragraph.replace(f"'{quote}'", f'{placeholder}{idx}{placeholder}')
 
         # split on typical endings
-        sentences = re.split(r'(?<=\w[.!?])\s+(?!(?:Mr|Dr|Prof|Inc|Jr|Sr|vs|etc)\.)(?=(?!<QUOTE>\d+<QUOTE>))', paragraph.strip())
+        sentences = re.split(r'(?<=\w[.!?])(?<!(?:Mr|Dr|Jr|Sr|vs|Ms)\.)(?<!(?:Prof)\.)(?<!(?:Inc|Mrs|etc)\.)\s+(?!(?:Mr|Dr|Prof|Inc|Jr|Sr|vs|Mrs|Ms|etc)\.)(?=(?!<QUOTE>\d+<QUOTE>))', paragraph.strip())
 
         # replace placeholders with original text
         for idx, quote in enumerate(quoted_text):

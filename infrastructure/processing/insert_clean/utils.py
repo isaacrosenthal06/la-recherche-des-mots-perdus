@@ -190,7 +190,7 @@ class InsertNewBook:
             if re.search(r"[.!?](\s|$)", para.strip()) and not self.contains_chapter_start(para.strip())
         ] 
         
-        return paragraphs
+        return filtered_paragraphs
         
     def execute_statement(self, qry, dict):
 
@@ -335,14 +335,18 @@ class InsertNewBook:
         
         response, response_status = self.execute_statement(statement, dict = val_dict)
         
-        if response_status:
-            print(f'Existing book identified: {response.fetchone()}')
+        response_vals = response.fetchone()
+        
+        if response_status and response_vals:
             
-            return response.fetchone(), response_status
+            print(f'Existing book identified: {response_vals}')
+            
+            return response_vals, True
+        
         else: 
             print(f'Existing book not identified')
             
-            return None, response_status
+            return None, False
 
     def split_paragraph_into_sentences(self, paragraph):
         ## identify quoted text
@@ -354,8 +358,7 @@ class InsertNewBook:
             paragraph = paragraph.replace(f"'{quote}'", f'{placeholder}{idx}{placeholder}')
 
         # split on typical endings
-        sentences = re.split(r'(?<=\w[.!?])\s+(?!(?:Mr|Dr|Prof|Inc|Jr|Sr|vs|etc)\.)(?=(?!<QUOTE>\d+<QUOTE>))', paragraph.strip())
-
+        sentences = re.split(r'(?<=\w[.!?])(?<!(?:Mr|Dr|Jr|Sr|vs|Ms)\.)(?<!(?:Prof)\.)(?<!(?:Inc|Mrs|etc)\.)\s+(?!(?:Mr|Dr|Prof|Inc|Jr|Sr|vs|Mrs|Ms|etc)\.)(?=(?!<QUOTE>\d+<QUOTE>))', paragraph.strip())
         # replace placeholders with original text
         for idx, quote in enumerate(quoted_text):
             sentences = [s.replace(f'{placeholder}{idx}{placeholder}', f"'{quote}'") for s in sentences]
