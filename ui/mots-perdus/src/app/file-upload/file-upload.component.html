@@ -1,0 +1,46 @@
+<div class="container">
+    <header class="header">
+      <h1>La Recherche du mots perdus</h1>
+      <nav class="navbar">
+        <a routerLink="/home" routerLinkActive="active" aria-label="Go to Home page">Home</a>
+        <a routerLink="/upload-file" routerLinkActive="active" aria-label="Add a new book">Add Books</a>
+        <a routerLink="/query" routerLinkActive="active" aria-label="Query existing books">Query books</a>
+      </nav>
+    </header>
+
+    <main class="content">
+        <h2>How would you like to add your book?</h2>
+        <form #form="ngForm" class = "choose_upload">
+            <label>
+            <input type="radio" name="option" [(ngModel)]="selectedOption" value="scrape" /> Scrape book
+            </label>
+            <br />
+            <label>
+            <input type="radio" name="option" [(ngModel)]="selectedOption" value="upload" /> Upload file
+            </label>
+        </form>
+
+        <div *ngIf="selectedOption === 'scrape'">
+
+            <form #form="ngForm" class = "choose_upload">
+                <br><br>
+                <label for="authorName">Author: </label>
+                <input type="text" id="authorName" name="authorName" [(ngModel)]="authorName">
+                <br><br>
+
+                <label for="bookTitle">Book title: </label>
+                <input type="text" id="bookTitle" name="bookTitle" [(ngModel)]="bookTitle">
+
+            </form>
+
+        </div>
+
+    </main>
+
+
+
+  
+    <footer class="footer">
+      <p>&copy; 2025 Isaac Rosenthal. All rights reserved.</p>
+    </footer>
+  </div>

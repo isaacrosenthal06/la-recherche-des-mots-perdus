@@ -1,0 +1,55 @@
+<div class="container">
+    <header class="header">
+      <h1>La Recherche du mots perdus</h1>
+      <nav class="navbar">
+        <a routerLink="/" routerLinkActive="active" aria-label="Go to Home page">Home</a>
+        <a routerLink="/upload-file" routerLinkActive="active" aria-label="Add a new book">Add Books</a>
+        <a routerLink="/query" routerLinkActive="active" aria-label="Query existing books">Query books</a>
+      </nav>
+    </header>
+  
+    <main class="content">
+      <h2>The app to help you find the quote you can't remember</h2>
+      <p>
+        This app provides two main feature:
+      </p>
+      <ul>
+        <li><strong>Upload File:</strong> Upload files to our server for processing.</li>
+        <li><strong>Query Page:</strong> Perform searches or queries on uploaded data.</li>
+      </ul>
+  
+      <p>Use the navigation bar above to explore the app.</p>
+
+    
+      <div *ngif= "allBooks.length ==0" class = 'book_response message'>
+        <p>{{message}}</p>
+      </div>
+
+      <div *ngIf="allBooks.length > 0">
+        <h2>Some books currently supported for querying:</h2>
+        <ul>
+          <li *ngFor = "let book of allBooks">
+
+            <strong>{{ book.title }}</strong> by {{ book.author }}
+
+          </li>
+        </ul>
+      </div>
+
+      
+      <div class="button-container">
+        <button routerLink="/upload-file" class="route-button">
+          Add a new book
+        </button>
+        <button *ngIf="allBooks.length > 0" routerLink="/query" class="route-button">Query existing books</button>
+      </div>
+      
+    </main>
+
+    <p></p>
+  
+    <footer class="footer">
+      <p>&copy; 2025 Isaac Rosenthal. All rights reserved.</p>
+    </footer>
+  </div>
+  
