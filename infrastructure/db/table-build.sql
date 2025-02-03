@@ -27,8 +27,7 @@ CREATE TABLE IF NOT EXISTS Sentences (
     CONSTRAINT unique_sentence UNIQUE (fk_paragraph, sentence_text)
 );
 
--- Need to add more info to request
-CREATE TABLE IF NOT EXISTS responses (
+CREATE TABLE IF NOT EXISTS Responses (
     pk SERIAL PRIMARY KEY,
     fk_books INT NOT NULL,
     request_date DATE NOT NULL,  
@@ -36,4 +35,24 @@ CREATE TABLE IF NOT EXISTS responses (
     request_status status,
     response_text TEXT,
     CONSTRAINT unique_request UNIQUE (request_date, request_text)  
+);
+
+CREATE TABLE IF NOT EXISTS Embeddings (
+    pk SERIAL PRIMARY KEY,
+    fk_books INT NOT NULL,
+    title    TEXT,
+    author   TEXT,
+    embedding_dim INT NOT NULL,
+    window_size INT NOT NULL,
+    FOREIGN KEY (fk_books) REFERENCES Books(pk) ON DELETE CASCADE, 
+    CONSTRAINT unique_embedding UNIQUE (title, author)  
+);
+
+CREATE TABLE IF NOT EXISTS Clusters (
+    pk SERIAL PRIMARY KEY,
+    fk_books INT NOT NULL,
+    title    TEXT,
+    author   TEXT,
+    FOREIGN KEY (fk_books) REFERENCES Books(pk) ON DELETE CASCADE, 
+    CONSTRAINT unique_cluster UNIQUE (title, author)    
 )

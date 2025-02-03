@@ -1,0 +1,20 @@
+FROM python:3.9
+
+# Install AWS CLI
+RUN pip install --no-cache-dir awscli
+
+# Install LocalStack
+RUN pip install --no-cache-dir localstack
+
+# Install application requirements in one step
+WORKDIR /app
+
+# Copy the entire app to the Docker image
+COPY . /app
+
+RUN pip install -r /app/lambdas/processing/insert_clean/find_gutenburg_books/requirements.txt
+RUN pip install -r /app/lambdas/processing/insert_clean/insert_text/requirements.txt
+RUN pip install -r /app/lambdas/clustering/cluster/requirements.txt
+RUN pip install -r /app/lambdas/clustering/predict/requirements.txt
+
+EXPOSE 4566

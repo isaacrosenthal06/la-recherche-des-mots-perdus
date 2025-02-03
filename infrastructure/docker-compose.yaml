@@ -1,0 +1,43 @@
+version: '3.8'
+
+services:
+  localstack:
+    build: 
+      context: .
+      dockerfile: Dockerfile.localstack
+    image: localstack/localstack
+    container_name: localstack_main
+    ports:
+      - "4566:4566"  # Main LocalStack endpoint (for all services)
+      - "4510-4559:4510-4559"  # For Lambda functions (if using a non-default port range)
+    environment:
+      - SERVICES=lambda,s3,iam,apigateway  # Specify which services to enable
+      - DEFAULT_REGION=us-east-1  # Default AWS region for LocalStack
+      - DATA_DIR=/Users/isaacrosenthal/Desktop/local_stack_data # Path to store persistent data for LocalStack (Optional)
+    volumes:
+      - "/var/run/docker.sock:/var/run/docker.sock" 
+      - "./setup-localstack.sh:/etc/localstack/init/ready.d/setup-localstack.sh" ## build aws service
+      - "./lambdas/processing/insert_clean/find_gutenburg_books:/app/guten_lambda"  ## guten lambda
+      - "./lambdas/processing/insert_clean/insert_text:/app/embed_lambda" ## embeddings 
+      - "./lambdas/clustering/cluster:/app/cluster_lambda" ## clustering
+      - "./lambdas/clustering/predict:/app/predict_lambda" ## prediction
+
+    networks:
+      - localstack_network
+
+  # Your Rest API (Express) service
+  rest-api:
+    build:
+        context: ./lambdas/rest-api  # Path to the directory of your Express app
+        dockerfile: Dockerfile.rest-api
+    image: express/api
+    container_name: express_api
+    ports:
+      - "3000:3000"  # Expose your REST API on port 3000
+
+
+networks:
+  localstack_network:
+    driver: bridge
+
+  
