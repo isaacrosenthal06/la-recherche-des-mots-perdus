@@ -1,15 +1,14 @@
 import requests
-import json
 from bs4 import BeautifulSoup
 import re 
 from sqlalchemy import create_engine, text
 from typing import List
 from pathlib import Path
+import os
 
 class InsertNewBook:
     
     def __init__(self, 
-                 config_path: str, 
                  title: str, 
                  author: str,
                  find = True,
@@ -18,17 +17,11 @@ class InsertNewBook:
         # Get the path of the current script
         script_dir = Path(__file__).resolve().parent
 
-        # Define the relative path to the config file
-        config_file = script_dir / config_path
-    
-        with open(config_file, "r") as file:
-            config = json.load(file)
-
-        self.db_user        = config["DB_USER"]
-        self.db_password    = config["DB_PASSWORD"]
-        self.db_host        = config["DB_HOST"]
-        self.db_port        = config["DB_PORT"]
-        self.db_name        = config["DB_NAME"]
+        self.db_user        = os.environ.get("DB_USER")
+        self.db_password    = os.environ.get("DB_PASSWORD")
+        self.db_host        = os.environ.get("DB_HOST")
+        self.db_port        = os.environ.get("DB_PORT")
+        self.db_name        = os.environ.get("DB_NAME")
         self.title          = title
         self.author         = author 
         self.db_url = f'postgresql+psycopg2://{self.db_user}:{self.db_password}@{self.db_host}:{self.db_port}/{self.db_name}'

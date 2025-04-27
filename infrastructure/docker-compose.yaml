@@ -1,43 +1,65 @@
 version: '3.8'
 
 services:
-  localstack:
+
+  db:
     build: 
-      context: .
-      dockerfile: Dockerfile.localstack
-    image: localstack/localstack
-    container_name: localstack_main
+      context: ./db
+      dockerfile: Dockerfile.db 
+    environment: 
+      DB_HOST: host.docker.internal
+      DB_PORT: ${DB_PORT}
+      DB_USER: ${DB_USER}
+      DB_PASSWORD: ${DB_PASSWORD}
+      DB_NAME: ${DB_NAME}
+    ports: 
+     - "8000:8000"
+    command: python ./db-setup.py 
+    
+  # Rest API (Express) service
+  rest-api:
+    build:
+        context: ./lambdas/rest-api 
+        dockerfile: Dockerfile.rest-api
+    environment: 
+      DB_HOST: host.docker.internal
+      DB_PORT: ${DB_PORT}
+      DB_USER: ${DB_USER}
+      DB_PASSWORD: ${DB_PASSWORD}
+      DB_NAME: ${DB_NAME}
+    image: express/api
+    container_name: express_api
     ports:
-      - "4566:4566"  # Main LocalStack endpoint (for all services)
-      - "4510-4559:4510-4559"  # For Lambda functions (if using a non-default port range)
+      - "3000:3000"
+    depends_on:
+      - db
+
+ 
+  localstack:
+    image: localstack/localstack:latest
+    ports:
+      - "4566:4566"  
+      - "4510-4520:4510-4520" 
     environment:
-      - SERVICES=lambda,s3,iam,apigateway  # Specify which services to enable
-      - DEFAULT_REGION=us-east-1  # Default AWS region for LocalStack
-      - DATA_DIR=/Users/isaacrosenthal/Desktop/local_stack_data # Path to store persistent data for LocalStack (Optional)
+      - DEBUG=true 
+      - SERVICES=lambda,s3,iam,apigateway
+      - HOSTNAME=localstack
+      - HOSTNAME_EXTERNAL=localstack
+      - AWS_DEFAULT_REGION=us-east-1 
+      - DB_HOST=host.docker.internal
+      - DB_PORT=${DB_PORT}
+      - DB_USER=${DB_USER}
+      - DB_PASSWORD=${DB_PASSWORD}
+      - DB_NAME=${DB_NAME}
     volumes:
       - "/var/run/docker.sock:/var/run/docker.sock" 
       - "./setup-localstack.sh:/etc/localstack/init/ready.d/setup-localstack.sh" ## build aws service
+      - './role-policy.json:/app/policies/role-policy.json'
       - "./lambdas/processing/insert_clean/find_gutenburg_books:/app/guten_lambda"  ## guten lambda
       - "./lambdas/processing/insert_clean/insert_text:/app/embed_lambda" ## embeddings 
       - "./lambdas/clustering/cluster:/app/cluster_lambda" ## clustering
       - "./lambdas/clustering/predict:/app/predict_lambda" ## prediction
-
-    networks:
-      - localstack_network
-
-  # Your Rest API (Express) service
-  rest-api:
-    build:
-        context: ./lambdas/rest-api  # Path to the directory of your Express app
-        dockerfile: Dockerfile.rest-api
-    image: express/api
-    container_name: express_api
-    ports:
-      - "3000:3000"  # Expose your REST API on port 3000
-
-
-networks:
-  localstack_network:
-    driver: bridge
+    depends_on:
+      - db
 
   

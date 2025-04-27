@@ -2,15 +2,14 @@
 
 cd /app
 
-export LOCALSTACK_ENDPOINT=http://localhost:4566
-export AWS_REGION=us-east-1
-export AWS_ACCESS_KEY_ID=test
-export AWS_SECRET_ACCESS_KEY=test
+export LOCALSTACK_ENDPOINT="http://localhost:4566"
+export AWS_REGION="us-east-1"
+export AWS_ACCESS_KEY_ID="test"
+export AWS_SECRET_ACCESS_KEY="test"
 
 aws configure set aws_access_key_id $AWS_ACCESS_KEY_ID
 aws configure set default.region $AWS_REGION
 aws configure set aws_secret_access_key $AWS_SECRET_ACCESS_KEY
-
 
 echo "🚀 Setting up LocalStack services..."
 
@@ -47,7 +46,7 @@ if [ -n "$ROLE_EXISTS" ]; then
     echo "✅ IAM Role '$ROLE_NAME' already exists. Skipping creation."
 else
     aws iam create-role --role-name $ROLE_NAME \
-      --assume-role-policy-document file://role-policy.json \
+      --assume-role-policy-document file://policies/role-policy.json \
       --endpoint-url=$LOCALSTACK_ENDPOINT > /dev/null
     echo "✅ IAM Role created."
 fi
@@ -62,8 +61,17 @@ function test_lambda {
     cd $LAMBDA_DIR
 
     ## run script
-    python test_lambda.py
+    if [ ! -f test_lambda.py ]; then 
+      echo "Test script DNE, skipping test"
+      return  0 
+    fi 
 
+    if [ -f requirements.txt ]; then 
+      echo "Installing requirements to test for $LAMBDA_NAME"
+      pip install --no-cache-dir -r requirements.txt 
+    fi         
+
+    python test_lambda.py
     local exit_code=$?
 
     # Capture the exit code of the test
@@ -127,6 +135,7 @@ function deploy_lambda {
       --runtime python3.9 \
       --role arn:aws:iam::000000000000:role/$ROLE_NAME \
       --handler cluster_handler.lambda_handler \
+      --environment "Variables={DB_HOST=$DB_HOST,DB_PORT=$DB_PORT,DB_USER=$DB_USER,DB_PASSWORD=$DB_PASSWORD,DB_NAME=$DB_NAME}" \
       --zip-file fileb://"$ZIP_FILE" \
       --endpoint-url=$LOCALSTACK_ENDPOINT > /dev/null
     echo "✅ Lambda function '$LAMBDA_NAME' deployed."

@@ -31,8 +31,7 @@ def cluster_handler(event, context):
     tf_idf_df    = f'{title}_{author}_tf_idf_wts.csv'
     word_vectors = f'{title}_{author}_vectors.tsv'
     
-    cluster_class = Cluster('shared/config.json',
-                            title = title,
+    cluster_class = Cluster(title = title,
                             author = author,
                             vocabulary = vocab,
                             tf_idf_wts = tf_idf_df,

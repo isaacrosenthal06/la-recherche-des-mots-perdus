@@ -16,6 +16,7 @@ __pycache__/
 
 # logs/train
 logs/train/
+train/
 
 # Distribution / packaging
 .Python
@@ -180,3 +181,6 @@ cython_debug/
 
 # PyPI configuration file
 .pypirc
+
+
+tsconfig.tsbuildinfo

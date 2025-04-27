@@ -18,6 +18,7 @@ import nltk
 from nltk.corpus import stopwords
 import pickle
 import boto3
+import os
 nltk.download('stopwords')
 nltk.download('wordnet')
 
@@ -80,18 +81,12 @@ def confirm_cluster(title, author):
 
 def execute_statement(qry, dict):
     
-    script_dir = Path(__file__).resolve().parent
-    
-    config_file = script_dir / 'config.json'
-    
-    with open(config_file, "r") as file:
-            config = json.load(file)
 
-    db_user        = config["DB_USER"]
-    db_password    = config["DB_PASSWORD"]
-    db_host        = config["DB_HOST"]
-    db_port        = config["DB_PORT"]
-    db_name        = config["DB_NAME"]
+    db_user        = os.environ.get("DB_USER")
+    db_password    = os.environ.get("DB_PASSWORD")
+    db_host        = os.environ.get("DB_HOST")
+    db_port        = os.environ.get("DB_PORT")
+    db_name        = os.environ.get("DB_NAME")
     db_url = f'postgresql+psycopg2://{db_user}:{db_password}@{db_host}:{db_port}/{db_name}'
     
     try: 
@@ -121,7 +116,6 @@ def execute_statement(qry, dict):
 class Cluster:
     
     def __init__(self,
-                 config_path: str, 
                  title: str, 
                  author: str,
                  vocabulary: str,
@@ -131,17 +125,11 @@ class Cluster:
         
         script_dir = Path(__file__).resolve().parent
 
-        # Define the relative path to the config file
-        config_file = script_dir / config_path
-        
-        with open(config_file, "r") as file:
-            config = json.load(file)
-
-        self.db_user        = config["DB_USER"]
-        self.db_password    = config["DB_PASSWORD"]
-        self.db_host        = config["DB_HOST"]
-        self.db_port        = config["DB_PORT"]
-        self.db_name        = config["DB_NAME"]
+        self.db_user        = os.environ.get("DB_USER")
+        self.db_password    = os.environ.get("DB_PASSWORD")
+        self.db_host        = os.environ.get("DB_HOST")
+        self.db_port        = os.environ.get("DB_PORT")
+        self.db_name        = os.environ.get("DB_NAME")
         self.title          = title
         self.author         = author 
         self.embedding_dim  = embedding_dim
@@ -268,7 +256,6 @@ class Predict:
     
     def __init__(self,
                  new_text: str,
-                 config_path: str, 
                  title: str, 
                  author: str,
                  vocab: str,
@@ -279,16 +266,11 @@ class Predict:
         
         script_dir = Path(__file__).resolve().parent
 
-        # Define the relative path to the config file
-        config_file = script_dir / config_path
-        with open(config_file, "r") as file:
-            config = json.load(file)
-
-        self.db_user        = config["DB_USER"]
-        self.db_password    = config["DB_PASSWORD"]
-        self.db_host        = config["DB_HOST"]
-        self.db_port        = config["DB_PORT"]
-        self.db_name        = config["DB_NAME"]
+        self.db_user        = os.environ.get("DB_USER")
+        self.db_password    = os.environ.get("DB_PASSWORD")
+        self.db_host        = os.environ.get("DB_HOST")
+        self.db_port        = os.environ.get("DB_PORT")
+        self.db_name        = os.environ.get("DB_NAME")
         self.title          = title
         self.author         = author
 

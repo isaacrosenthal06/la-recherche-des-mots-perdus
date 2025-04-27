@@ -42,7 +42,6 @@ def predict_handler(event, context):
     
     try:
         predict_class = Predict(new_text,
-                                'shared/config.json',
                                 title = title,
                                 author = author,
                                 vocab = vocab,

@@ -12,8 +12,7 @@ def insert_and_embed(event, context):
     author      = event['author']
     url         = event['book_url']
 
-    insert_class = InsertNewBook(config_path='shared/config.json',
-                                 title = title,
+    insert_class = InsertNewBook(title = title,
                                  author = author)
     
     ## confirm not in db

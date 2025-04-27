@@ -1,8 +1,4 @@
 from shared.utils import InsertNewBook
-import numpy as np
-import io
-from pathlib import Path
-import pandas as pd
 import json 
 
 def find_guten_book(event, context):
@@ -11,8 +7,7 @@ def find_guten_book(event, context):
     author      = event['author']
     find        = event['scrape_text']
     
-    insert_class = InsertNewBook(config_path='config.json',
-                                 title = title,
+    insert_class = InsertNewBook(title = title,
                                  author = author,
                                  find = find)
     

@@ -2,10 +2,10 @@ from utils import DBUtils
 import os
 
 ## initialize DButils
-db_utils = DBUtils('infrastructure/db/config.json')
+db_utils = DBUtils()
 
 ## create database
-with open("infrastructure/db/db-build.sql", "r") as file:
+with open("./db-build.sql", "r") as file:
     db_build_script = file.read()
 
 try:
@@ -17,21 +17,24 @@ except Exception as e:
     
 ## create enums
 try:
-    db_utils.execute_script(qry = 'infrastructure/db/enum-build')
+    db_utils.execute_script(qry = './enum-build')
 
 except Exception as e:
     print(f"Error encounter, likely that type already exits: {e}")
 
 ## create tables
 try: 
-    db_utils.execute_script(script = 'infrastructure/db/table-build')
+    db_utils.execute_script(script = './table-build')
 except Exception as e:
     print(f"Error encounter, likely that table already exits: {e}")
 
 ## run modification scripts
-for filename in os.listdir('infrastructure/db/db_alter_scripts'):
+for filename in os.listdir('./db_alter_scripts'):
     name_without_extension = os.path.splitext(filename)[0]
     
-    db_utils.execute_script(script = f'infrastructure/db/db_alter_scripts/{name_without_extension}')
+    try: 
+        db_utils.execute_script(script = f'./db_alter_scripts/{name_without_extension}')
+    except Exception as e:
+        print(f'Error occurred, likely a object already exists: {e}')
     
     

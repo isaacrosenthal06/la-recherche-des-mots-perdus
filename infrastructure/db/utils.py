@@ -1,18 +1,15 @@
 import json
+import os
 from sqlalchemy import create_engine, text
 
 class DBUtils:
     
-    def __init__(self, config_path):
-    
-        with open(config_path, "r") as file:
-            config = json.load(file)
-
-        self.db_user        = config["DB_USER"]
-        self.db_password    = config["DB_PASSWORD"]
-        self.db_host        = config["DB_HOST"]
-        self.db_port        = config["DB_PORT"]
-        self.db_name        = config["DB_NAME"]
+    def __init__(self):
+        self.db_user        = os.environ.get("DB_USER")
+        self.db_password    = os.environ.get("DB_PASSWORD")
+        self.db_host        = os.environ.get("DB_HOST")
+        self.db_port        = os.environ.get("DB_PORT")
+        self.db_name        = os.environ.get("DB_NAME")
 
         self.db_url = f'postgresql+psycopg2://{self.db_user}:{self.db_password}@{self.db_host}:{self.db_port}/{self.db_name}'
 
